@@ -10,7 +10,7 @@ command = "node worker/build.mjs"
 [[d1_databases]]
 binding = "DB"
 database_name = "agenda-pericial"
-database_id = "SUBSTITUA_PELO_ID_DO_D1"
+database_id = "0945a6f9-aa86-449a-b58f-3968de9159eb"
 migrations_dir = "migrations"
 
 [vars]
