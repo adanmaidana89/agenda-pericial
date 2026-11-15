@@ -1,0 +1,22 @@
+name = "agenda-pericial"
+main = "dist/server/index.js"
+compatibility_date = "2026-11-15"
+workers_dev = true
+preview_urls = false
+
+[build]
+command = "node worker/build.mjs"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "agenda-pericial"
+database_id = "SUBSTITUA_PELO_ID_DO_D1"
+migrations_dir = "migrations"
+
+[vars]
+AGENDA_ACCESS_TEAM_DOMAIN = "SUBSTITUA.cloudflareaccess.com"
+AGENDA_ACCESS_AUD = "SUBSTITUA_PELO_AUD"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "agenda-pericial-imagens"
