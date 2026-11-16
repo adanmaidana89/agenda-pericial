@@ -150,6 +150,7 @@ async function api(request,env,path,user) {
     if (body.revision!==row.revision) return problem('A agenda mudou em outra sessão. Atualize o painel antes de tentar novamente.',409);
   }
   const touched = Array.isArray(body?.patch?.cases) ? body.patch.cases.map(item=>item?.id).filter(id=>typeof id==='string') : [];
+  if (path === '/api/processos/editar' && typeof body?.id==='string') touched.push(body.id);
   const snapshot = await readAgenda(env.DB,touched);
   if (snapshot.row.revision!==row.revision) return problem('A agenda mudou em outra sessão. Atualize o painel antes de tentar novamente.',409);
   const previous = snapshot.state;
@@ -160,6 +161,19 @@ async function api(request,env,path,user) {
     if (role !== 'responsavel') return problem('Apenas o titular pode configurar a perita.',403);
     if (!string(body.email,254) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email) || body.email.toLowerCase() === email) return problem('Informe o e-mail da conta da perita.');
     reviewer = body.email.toLowerCase();
+  } else if (path === '/api/processos/editar') {
+    const item = agenda.cases.find(entry=>entry.id===body.id);
+    if (!item) return problem('Processo não encontrado.',404);
+    const number = typeof body.number==='string' ? body.number.trim() : '';
+    if (!number || !string(number,100) || /[\r\n]/.test(number)) return problem('Informe um número de processo válido.');
+    if (body.link!=='' && !validCaseLink(body.link)) return problem('Informe um link válido para os autos.');
+    if (agenda.cases.some(entry=>entry.id!==item.id && entry.number===number)) return problem('Este número já está cadastrado.',409);
+    if (item.number!==number) {
+      item.number = number;
+      item.converted = false;
+    }
+    if (body.link) item.link = body.link;
+    else delete item.link;
   } else if (path === '/api/laudos/excluir') {
     if (role !== 'responsavel') return problem('Apenas o responsável pode excluir laudos.',403);
     if (typeof body.id!=='string') return problem('Informe qual laudo será excluído.');

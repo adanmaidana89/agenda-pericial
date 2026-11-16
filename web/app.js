@@ -4,7 +4,7 @@ const owners = ['Com você','Com a perita','Com você','Com a perita','Com você
 const $ = id => document.getElementById(id);
 const today = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Cuiaba'}).format(new Date());
 const display = date => date.split('-').reverse().join('/');
-const hasBlankReport = item => !item.format && (!item.text.trim() || item.text.trim()===template(item.number).trim());
+const hasBlankReport = item => !item.format && (!item.text.trim() || item.text.trim()===template(item.text.split('\n')[2]?.slice('Processo: '.length)).trim());
 const template = number => ['LAUDO MÉDICO PERICIAL','','Processo: '+number,'','I. Identificação','','II. Histórico e exame pericial','','III. Discussão e conclusão','','IV. Respostas aos quesitos',''].join(String.fromCharCode(10));
 let state = {dates:[],cases:[]};
 let revision;
@@ -119,8 +119,9 @@ function card(item) {
   const remove = role==='responsavel' && !archiveView ? '<button type="button" class="danger card-delete" data-delete="'+item.id+'" aria-label="Excluir laudo" title="Excluir laudo">×</button>' : '';
   const link = caseLink(item.link);
   const openCase = link ? '<a class="case-link" href="'+sanitize(link)+'" target="_blank" rel="noopener noreferrer" aria-label="Abrir autos do processo" title="Abrir autos do processo"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 8l3-3a4 4 0 0 1 6 6l-3 3M14 16l-3 3a4 4 0 0 1-6-6l3-3m1 5 6-6"/></svg></a>' : '';
+  const editCaseButton = '<button type="button" class="case-link" data-edit-case="'+item.id+'" aria-label="Editar processo" title="Editar processo"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6"/><path d="m10 14 1-4 7-7 3 3-7 7-4 1z"/></svg></button>';
   return '<article class="card process-card"><div class="process-card-title"><div><strong>'+sanitize(item.number)+'</strong>'+
-    '<p class="meta">'+sanitize(item.vara || 'Vara a informar')+'</p></div><div class="process-card-tools">'+openCase+remove+'</div></div>'+
+    '<p class="meta">'+sanitize(item.vara || 'Vara a informar')+'</p></div><div class="process-card-tools">'+openCase+editCaseButton+remove+'</div></div>'+
     '<div class="process-card-status"><span class="tag stage-'+(stageColors[item.stage]||'normal')+'">'+labels[item.stage]+'</span>'+(assigned?'<span class="meta">'+assigned+'</span>':'')+'</div>'+
     '<p class="deadline '+(days<0?'late':days<=3?'soon':'')+'">'+(item.due ? 'Entrega em '+display(item.due) : 'Prazo a definir')+(status?' · '+status:'')+'</p>'+
     '<div class="actions"><button type="button" data-edit="'+item.id+'">Editar laudo</button>'+
@@ -201,6 +202,21 @@ function addCases(date) {
     await save();
   });
 }
+function editCase(item) {
+  form('Editar processo',
+    '<label>Número do processo<input name="number" maxlength="100" value="'+sanitize(item.number)+'" required></label>'+
+    '<label>Link dos autos (opcional)<input type="url" name="link" maxlength="2048" value="'+sanitize(item.link || '')+'" placeholder="https://"></label>'+
+    '<p class="meta">Se alterar o número, confira também a identificação no texto do laudo.</p>',
+    'Salvar processo', async data => {
+      const number = data.get('number').trim();
+      const enteredLink = data.get('link').trim();
+      const link = caseLink(enteredLink);
+      if (!number) return 'Informe o número do processo.';
+      if (enteredLink && (!link || link.length>2048)) return 'Informe um endereço válido começando com http:// ou https://.';
+      await sync('/api/processos/editar',{id:item.id,number,link});
+      notice('Processo atualizado.');
+    });
+}
 async function loadReport(id) {
   const response = await fetch('/api/laudo?'+new URLSearchParams({id,revision}));
   const data = await response.json();
@@ -256,7 +272,7 @@ function confirmDeletion(title, message, submit) {
 $('board').onclick = async event => {
   const button = event.target.closest('button');
   if (!button || pending) return;
-  const {add,edit:editId,convert,download,delete:deleteId,deleteDate,archiveDate,restoreDate} = button.dataset;
+  const {add,edit:editId,editCase:editCaseId,convert,download,delete:deleteId,deleteDate,archiveDate,restoreDate} = button.dataset;
   if (add) return addCases(add);
   if ((archiveDate || restoreDate) && role==='responsavel') {
     const date = archiveDate || restoreDate;
@@ -280,8 +296,9 @@ $('board').onclick = async event => {
         notice('Data excluída.');
       });
   }
-  let item = state.cases.find(entry=>entry.id===(editId || convert || download || deleteId));
+  let item = state.cases.find(entry=>entry.id===(editId || editCaseId || convert || download || deleteId));
   if (!item) return;
+  if (editCaseId) return editCase(item);
   if (editId || convert || download) {
     const start = revision;
     button.disabled = true;
