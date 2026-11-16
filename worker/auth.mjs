@@ -9,7 +9,7 @@ async function supabase(settings,path,token,body) {
     method:body ? 'POST' : 'GET',
     headers:{apikey:settings.key,...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},
     ...(body?{body:JSON.stringify(body)}:{}),
-    redirect:'error'
+    redirect:'manual'
   });
 }
 
@@ -41,7 +41,7 @@ async function authAction(request,env,settings,path) {
   if (path==='/auth/sair') {
     const token = readSession(request).access;
     if (token) {
-      try {await fetch(settings.url+'/auth/v1/logout?scope=local',{method:'POST',headers:{apikey:settings.key,Authorization:'Bearer '+token},redirect:'error'});}
+      try {await fetch(settings.url+'/auth/v1/logout?scope=local',{method:'POST',headers:{apikey:settings.key,Authorization:'Bearer '+token},redirect:'manual'});}
       catch { /* Clear the local session even if Supabase is unavailable. */ }
     }
     return sessionResponse(new Response(null,{status:303,headers:{...headers,Location:'/entrar'}}),null);
@@ -60,6 +60,7 @@ async function authAction(request,env,settings,path) {
   } catch {
     return problem('A Agenda não conseguiu conectar ao Supabase.',503);
   }
+  if (response.status>=300 && response.status<400) return problem('O Supabase devolveu um redirecionamento inesperado.',503);
   if (response.status===429) return problem('Muitas tentativas. Aguarde e tente novamente.',429);
   if (response.status>=500) return problem('O Supabase respondeu com erro HTTP '+response.status+'.',503);
   const session = response.ok ? await response.json() : null;
