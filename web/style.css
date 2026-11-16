@@ -44,3 +44,8 @@ button.danger{color:#971c34;border-color:#ebb3bd}button.danger:hover{background:
 .login-card input { margin: 6px 0 14px; }
 .login-card #login-message { color: #9b2234; margin: 12px 0 0; }
 .login-card #login-message:empty { display: none; }
+
+.process-card-title > .process-card-tools { display:flex; align-items:center; gap:5px; flex-shrink:0; }
+.case-link { display:inline-grid; place-items:center; width:28px; height:28px; border:1px solid #d9e0ef; border-radius:7px; color:#263772; background:#fff; }
+.case-link:hover { background:#edf1ff; }
+.case-link svg { width:18px; height:18px; }

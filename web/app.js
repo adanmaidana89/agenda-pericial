@@ -14,6 +14,7 @@ let role;
 let reviewer = '';
 let pending = false;
 let generated;
+let archiveView = false;
 const sanitize = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const daysLeft = item => item.due && item.stage !== 5 && item.stage !== 6 ? (Date.parse(item.due)-Date.parse(today()))/86400000 : Infinity;
 let noticeTimer;
@@ -80,29 +81,46 @@ $('perita').onclick = () => form('Conta da perita',
     await sync('/api/perita',{email:data.get('email').trim()});
     notice('E-mail da perita salvo.');
   });
+$('archive-view').onclick = () => {
+  archiveView = !archiveView;
+  $('urgent').checked = false;
+  render();
+};
 function render() {
   const query = $('search').value.trim().toLowerCase();
   const urgent = $('urgent').checked;
+  const archived = new Set(state.archivedDates ?? []);
+  const activeCases = state.cases.filter(item=>!archived.has(item.date));
+  $('board-title').textContent = archiveView ? 'Perícias arquivadas' : 'Perícias por data';
+  $('archive-view').textContent = archiveView ? 'Voltar às perícias ativas' : 'Consultar arquivados';
+  $('archive-view').setAttribute('aria-pressed',String(archiveView));
   $('stats').innerHTML = [
     ['Processos cadastrados',state.cases.length],
-    ['Prazos próximos ou atrasados',state.cases.filter(item => daysLeft(item)<=3).length],
+    ['Prazos próximos ou atrasados',activeCases.filter(item => daysLeft(item)<=3).length],
     ['Laudos juntados',state.cases.filter(item => item.stage===5).length]
   ].map(([label,value]) => '<div class="stat">'+label+'<strong>'+value+'</strong></div>').join('');
-  $('board').innerHTML = [...state.dates].sort().map(date => {
+  $('board').innerHTML = state.dates.filter(date=>archived.has(date)===archiveView).sort().map(date => {
     const cases = state.cases.filter(item => item.date===date);
     const visible = cases.filter(item => (!urgent || daysLeft(item)<=3) && (item.number+' '+item.vara).toLowerCase().includes(query));
     if ((urgent || query) && !visible.length) return '';
-    return '<section class="column"><div class="column-head"><div><h3>'+display(date)+'</h3><p>'+cases.length+' processo(s)</p></div><div class="actions"><button data-add="'+date+'">＋ Processo</button>'+(role==='responsavel' ? '<button class="danger" data-delete-date="'+date+'">Excluir data</button>' : '')+'</div></div>'+
+    const addButton = archiveView ? '' : '<button data-add="'+date+'">＋ Processo</button>';
+    const archiveButton = role!=='responsavel' ? '' : archiveView
+      ? '<button data-restore-date="'+date+'">Restaurar</button>'
+      : '<button data-archive-date="'+date+'">Arquivar</button>';
+    const deleteButton = role==='responsavel' && !archiveView ? '<button class="danger" data-delete-date="'+date+'">Excluir data</button>' : '';
+    return '<section class="column"><div class="column-head"><div><h3>'+display(date)+'</h3><p>'+cases.length+' processo(s)</p></div><div class="actions">'+addButton+archiveButton+deleteButton+'</div></div>'+
       (visible.map(card).join('') || '<p class="empty">Nenhum processo nesta data.</p>')+'</section>';
-  }).join('') || '<p class="empty">Nenhum processo encontrado.</p>';
+  }).join('') || '<p class="empty">'+(archiveView ? 'Nenhum processo arquivado encontrado.' : 'Nenhum processo encontrado.')+'</p>';
 }
 function card(item) {
-  const days = daysLeft(item);
+  const days = archiveView ? Infinity : daysLeft(item);
   const status = days < 0 ? 'Atrasado' : days === 0 ? 'Vence hoje' : days <= 3 ? 'Vence em '+days+' dia(s)' : '';
   const assigned = (role==='perita' ? ['Com o responsável','Com você','Com o responsável','Com você','Com o responsável'] : owners)[item.stage];
-  const remove = role==='responsavel' ? '<button type="button" class="danger card-delete" data-delete="'+item.id+'" aria-label="Excluir laudo" title="Excluir laudo">×</button>' : '';
+  const remove = role==='responsavel' && !archiveView ? '<button type="button" class="danger card-delete" data-delete="'+item.id+'" aria-label="Excluir laudo" title="Excluir laudo">×</button>' : '';
+  const link = caseLink(item.link);
+  const openCase = link ? '<a class="case-link" href="'+sanitize(link)+'" target="_blank" rel="noopener noreferrer" aria-label="Abrir autos do processo" title="Abrir autos do processo"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 8l3-3a4 4 0 0 1 6 6l-3 3M14 16l-3 3a4 4 0 0 1-6-6l3-3m1 5 6-6"/></svg></a>' : '';
   return '<article class="card process-card"><div class="process-card-title"><div><strong>'+sanitize(item.number)+'</strong>'+
-    '<p class="meta">'+sanitize(item.vara || 'Vara a informar')+'</p></div>'+remove+'</div>'+
+    '<p class="meta">'+sanitize(item.vara || 'Vara a informar')+'</p></div><div class="process-card-tools">'+openCase+remove+'</div></div>'+
     '<div class="process-card-status"><span class="tag stage-'+(stageColors[item.stage]||'normal')+'">'+labels[item.stage]+'</span>'+(assigned?'<span class="meta">'+assigned+'</span>':'')+'</div>'+
     '<p class="deadline '+(days<0?'late':days<=3?'soon':'')+'">'+(item.due ? 'Entrega em '+display(item.due) : 'Prazo a definir')+(status?' · '+status:'')+'</p>'+
     '<div class="actions"><button type="button" data-edit="'+item.id+'">Editar laudo</button>'+
@@ -161,14 +179,25 @@ function detailsForDate(date) {
   const common = key => cases.length && cases.every(item=>item[key]===cases[0][key]) ? cases[0][key] : '';
   return {vara:common('vara'),due:common('due')};
 }
+function caseLink(value) {
+  if (!value || typeof value!=='string') return '';
+  try {
+    const url = new URL(value);
+    return ['http:','https:'].includes(url.protocol) && !url.username && !url.password ? url.href : '';
+  } catch {return '';}
+}
 function addCases(date) {
-  form('Processos de '+display(date),'<label>Números dos processos, um por linha<textarea name="numbers" rows="6" required placeholder="EXEMPLO-006"></textarea></label>','Cadastrar processos', async data => {
+  form('Processos de '+display(date),'<label>Números dos processos, um por linha<textarea name="numbers" rows="6" required placeholder="EXEMPLO-006"></textarea></label><label>Link dos autos (opcional)<input type="url" name="link" maxlength="2048" placeholder="https://"></label><p class="meta">Para vincular um endereço, cadastre um processo por vez.</p>','Cadastrar processos', async data => {
     const numbers = [...new Set(data.get('numbers').split(/\r?\n/).map(line=>line.trim()).filter(Boolean))];
     if (!numbers.length) return 'Informe ao menos um número de processo.';
+    const enteredLink = data.get('link').trim();
+    const link = caseLink(enteredLink);
+    if (enteredLink && (!link || link.length>2048)) return 'Informe um endereço válido começando com http:// ou https://.';
+    if (link && numbers.length!==1) return 'Para adicionar um link, informe apenas um número de processo.';
     const duplicated = numbers.find(number => state.cases.some(item=>item.number===number));
     if (duplicated) return 'O processo '+duplicated+' já foi cadastrado.';
     const {vara,due} = detailsForDate(date);
-    state.cases.push(...numbers.map(number=>({number,id:crypto.randomUUID(),date,vara,due,stage:0,text:template(number),converted:false})));
+    state.cases.push(...numbers.map(number=>({number,id:crypto.randomUUID(),date,vara,due,stage:0,text:template(number),converted:false,...(link?{link}:{})})));
     await save();
   });
 }
@@ -227,8 +256,18 @@ function confirmDeletion(title, message, submit) {
 $('board').onclick = async event => {
   const button = event.target.closest('button');
   if (!button || pending) return;
-  const {add,edit:editId,convert,download,delete:deleteId,deleteDate} = button.dataset;
+  const {add,edit:editId,convert,download,delete:deleteId,deleteDate,archiveDate,restoreDate} = button.dataset;
   if (add) return addCases(add);
+  if ((archiveDate || restoreDate) && role==='responsavel') {
+    const date = archiveDate || restoreDate;
+    const action = archiveDate ? 'Arquivar' : 'Restaurar';
+    return form(action+' data',
+      '<p>'+action+' a coluna de <strong>'+display(date)+'</strong> com todos os seus processos?</p>',
+      action, async () => {
+        await sync('/api/datas/'+(archiveDate?'arquivar':'restaurar'),{date});
+        notice(archiveDate?'Data arquivada.':'Data restaurada.');
+      });
+  }
   if (deleteDate && role==='responsavel') {
     const count = state.cases.filter(entry=>entry.date===deleteDate).length;
     const detail = count===0 ? 'A coluna está vazia.' :
@@ -308,6 +347,22 @@ setInterval(()=>refresh(false),30000);
 fetch('/auth/status').then(response=>response.ok ? response.json() : null).then(status=>{
   if (status?.passwordLogin) $('sign-out').hidden = false;
 }).catch(()=>{});
-$('sign-out').onsubmit = event => {
-  if (($('dialog').open || pending) && !confirm('Alterações ainda não salvas podem ser perdidas. Sair da Agenda?')) event.preventDefault();
+$('sign-out').onsubmit = async event => {
+  event.preventDefault();
+  if (($('dialog').open || pending) && !confirm('Alterações ainda não salvas podem ser perdidas. Sair da Agenda?')) return;
+  const button = event.currentTarget.querySelector('button');
+  button.disabled = true;
+  try {
+    const response = await fetch('/auth/sair',{
+      method:'POST',
+      referrerPolicy:'same-origin'
+    });
+    if (!response.ok || !response.redirected || new URL(response.url).pathname!=='/entrar') {
+      throw new Error('A sessão não pôde ser encerrada.');
+    }
+    window.location.replace('/entrar');
+  } catch {
+    notice('Não foi possível sair. Tente novamente.');
+    button.disabled = false;
+  }
 };

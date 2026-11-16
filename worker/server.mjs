@@ -51,6 +51,14 @@ function reportFormat(value) {
   return {family:value.family,size:value.size,color:value.color,watermark:value.watermark,...(value.paper?{paper:value.paper}:{}),...layout,blocks};
 }
 
+function validCaseLink(value) {
+  if (!string(value,2048)) return false;
+  try {
+    const url = new URL(value);
+    return ['https:','http:'].includes(url.protocol) && !url.username && !url.password;
+  } catch {return false;}
+}
+
 function clean(next, previous, role) {
   if (!Array.isArray(next?.dates) || !Array.isArray(next.cases) || next.dates.length > 5000 ||
       next.cases.length > 10000 || !next.dates.every(date)) return null;
@@ -71,7 +79,8 @@ function clean(next, previous, role) {
       numbers.add(value.number);
       continue;
     }
-    if (!string(value.text,50000)) return null;
+    const link = value.link ?? old?.link ?? '';
+    if (!string(value.text,50000) || (link!=='' && !validCaseLink(link))) return null;
     const format = reportFormat(value.format);
     if (format === false) return null;
     const {id,number,date:exam,due,vara,text,stage} = value;
@@ -83,7 +92,7 @@ function clean(next, previous, role) {
     if (!old || textChanged || old.stage !== stage || old.due !== due) {
       history.unshift({stage,role,at:new Date().toISOString(),text});
     }
-    cases.push({id,number,date:exam,due,vara,text,format,stage,converted,history:history.slice(0,8)});
+    cases.push({id,number,date:exam,due,vara,text,format,stage,converted,...(link?{link}:{}),history:history.slice(0,8)});
     ids.add(id);
     numbers.add(number);
   }
@@ -95,7 +104,7 @@ function clean(next, previous, role) {
     if (!details || !string(details.vara,250) || !(details.due==='' || date(details.due))) return null;
     dateDetails[value] = {vara:details.vara,due:details.due};
   }
-  return {dates,cases,...(Object.keys(dateDetails).length?{dateDetails}:{}),...(previous.models?{models:previous.models}:{}),...(previous.defaultModel?{defaultModel:previous.defaultModel}:{})};
+  return {dates,cases,...(previous.archivedDates?{archivedDates:previous.archivedDates}:{}),...(Object.keys(dateDetails).length?{dateDetails}:{}),...(previous.models?{models:previous.models}:{}),...(previous.defaultModel?{defaultModel:previous.defaultModel}:{})};
 }
 
 async function api(request,env,path,user) {
@@ -157,12 +166,20 @@ async function api(request,env,path,user) {
     const index = agenda.cases.findIndex(item=>item.id===body.id);
     if (index===-1) return problem('Laudo não encontrado.',404);
     agenda.cases.splice(index,1);
+  } else if (path === '/api/datas/arquivar' || path === '/api/datas/restaurar') {
+    if (role !== 'responsavel') return problem('Apenas o responsável pode arquivar ou restaurar datas.',403);
+    if (!date(body.date) || !agenda.dates.includes(body.date)) return problem('Data não encontrada.',404);
+    const archived = new Set(agenda.archivedDates ?? []);
+    if (path === '/api/datas/arquivar') archived.add(body.date);
+    else archived.delete(body.date);
+    agenda.archivedDates = [...archived];
   } else if (path === '/api/datas/excluir') {
     if (role !== 'responsavel') return problem('Apenas o responsável pode excluir datas.',403);
     if (!date(body.date)) return problem('Informe qual data será excluída.');
     if (!agenda.dates.includes(body.date)) return problem('Data não encontrada.',404);
     agenda.dates = agenda.dates.filter(value=>value!==body.date);
     if (agenda.dateDetails) delete agenda.dateDetails[body.date];
+    if (agenda.archivedDates) agenda.archivedDates = agenda.archivedDates.filter(value=>value!==body.date);
     agenda.cases = agenda.cases.filter(item=>item.date!==body.date);
   } else if (path === '/api/configuracoes/importar') {
     if (role!=='responsavel') return problem('Apenas o responsável pode importar as configurações.',403);
@@ -210,6 +227,10 @@ async function api(request,env,path,user) {
     const byId = new Map(previous.cases.map(item=>[item.id,item]));
     for (const item of patch.cases) {
       if (!item || typeof item.id!=='string') return problem('Dados inválidos.');
+      const old = byId.get(item.id);
+      if (agenda.archivedDates?.includes(item.date) && old?.date!==item.date) {
+        return problem('Restaure a data antes de cadastrar processos nela.',409);
+      }
       byId.set(item.id,item);
     }
     const result = clean({dates:patch.dates,dateDetails:patch.dateDetails,cases:[...byId.values()]},previous,role);
