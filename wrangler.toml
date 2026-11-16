@@ -14,6 +14,7 @@ database_id = "0945a6f9-aa86-449a-b58f-3968de9159eb"
 migrations_dir = "migrations"
 
 [vars]
+AGENDA_SUPABASE_URL = "https://tifzyzkhhaqoppxbgzff.supabase.co"
 AGENDA_ACCESS_TEAM_DOMAIN = "sweet-heart-39f0.cloudflareaccess.com"
 AGENDA_ACCESS_AUD = "f66d75b5a79af3fecd4fef589beba948f71534afe8022c2003df16816ebf3291"
 
