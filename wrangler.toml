@@ -15,7 +15,7 @@ migrations_dir = "migrations"
 
 [vars]
 AGENDA_ACCESS_TEAM_DOMAIN = "SUBSTITUA.cloudflareaccess.com"
-AGENDA_ACCESS_AUD = "db3bf93cc578d6b95e128a8d1b875c0b6801c6745527832400a19b617b68078e"
+AGENDA_ACCESS_AUD = "f66d75b5a79af3fecd4fef589beba948f71534afe8022c2003df16816ebf3291"
 
 [[r2_buckets]]
 binding = "IMAGES"
