@@ -51,7 +51,45 @@ async function authAction(request,env,settings,path) {
   let body;
   try {body=await request.json();} catch {return problem('Dados inválidos.');}
   if (!string(body?.email,254) || !string(body?.password,1024) || !body.password) return problem('Informe seu e-mail e sua senha.');
-  const response = await supabase(settings,'token?grant_type=password',null,{email:body.email.trim().toLowerCase(),password:body.password});
+    if (path !== '/auth/entrar') return problem('Página inexistente.', 404);
+  if (!request.headers.get('content-type')?.startsWith('application/json')) {
+    return problem('Requisição inválida.', 415);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return problem('Dados inválidos.');
+  }
+
+  if (!string(body?.email, 254) || !string(body?.password, 1024) || !body.password) {
+    return problem('Informe seu e-mail e sua senha.');
+  }
+
+  let response;
+  try {
+    response = await supabase(settings, 'token?grant_type=password', null, {
+      email: body.email.trim().toLowerCase(),
+      password: body.password
+    });
+  } catch {
+    return problem('A Agenda não conseguiu conectar ao Supabase.', 503);
+  }
+
+  if (response.status === 429) {
+    return problem('Muitas tentativas. Aguarde e tente novamente.', 429);
+  }
+  if (response.status >= 500) {
+    return problem('O Supabase respondeu com erro HTTP ' + response.status + '.', 503);
+  }
+
+  const session = response.ok ? await response.json() : null;
+  if (!session?.access_token || !session.refresh_token || !await allowedAccount(env, authUser(session.user))) {
+    return problem('E-mail ou senha inválidos, ou conta sem acesso.', 401);
+  }
+  return sessionResponse(json({ok: true}), session);
+});
   if (response.status===429) return problem('Muitas tentativas. Aguarde e tente novamente.',429);
   if (response.status>=500) return problem('O login está temporariamente indisponível.',503);
   const session = response.ok ? await response.json() : null;
