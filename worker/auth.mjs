@@ -37,7 +37,11 @@ async function allowedAccount(env,user) {
 }
 
 async function authAction(request,env,settings,path) {
-  if (request.method!=='POST' || request.headers.get('origin')!==new URL(request.url).origin) return problem('Requisição inválida.',405);
+  if (request.method!=='POST') return problem('Requisição inválida.',405);
+  const origin = request.headers.get('origin');
+  const fetchSite = request.headers.get('sec-fetch-site');
+  const sameOriginLogout = path==='/auth/sair' && fetchSite==='same-origin' && (origin===null || origin==='null');
+  if (origin!==new URL(request.url).origin && !sameOriginLogout) return problem('Requisição inválida.',405);
   if (path==='/auth/sair') {
     const token = readSession(request).access;
     if (token) {
