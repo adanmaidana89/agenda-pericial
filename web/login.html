@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · Agenda Pericial</title>
+<link rel="stylesheet" href="/style.css">
+<main class="login-layout">
+  <form id="login" class="login-card" method="post" action="/auth/entrar">
+    <div class="brand"><span>AP</span><div>Agenda Pericial<small>Gestão de laudos</small></div></div>
+    <h1>Entrar</h1>
+    <label for="email">E-mail</label>
+    <input id="email" name="email" type="email" autocomplete="username" required maxlength="254">
+    <label for="password">Senha</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+    <button class="primary" type="submit">Entrar</button>
+    <p id="login-message" role="status"></p>
+  </form>
+</main>
+<script src="/login.js"></script>
+</html>

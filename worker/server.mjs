@@ -109,7 +109,7 @@ async function api(request,env,path,user) {
     row = await env.DB.prepare('SELECT * FROM agenda WHERE id=1').first();
   }
   const configuredReviewer = row?.reviewer || initialReviewer;
-  const role = row?.owner === identity && email === ownerEmail ? 'responsavel' :
+  const role = row && email === ownerEmail && (env.AGENDA_SUPABASE_URL || row.owner === identity) ? 'responsavel' :
     row && email && configuredReviewer === email && email !== ownerEmail ? 'perita' : null;
   if (!role) return problem('Esta conta ainda não tem acesso à agenda.',403);
   const get = request.method==='GET';
@@ -149,7 +149,7 @@ async function api(request,env,path,user) {
   let reviewer = row.reviewer;
   if (path === '/api/perita') {
     if (role !== 'responsavel') return problem('Apenas o titular pode configurar a perita.',403);
-    if (!string(body.email,254) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email) || body.email.toLowerCase() === email) return problem('Informe o e-mail da conta ChatGPT da perita.');
+    if (!string(body.email,254) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email) || body.email.toLowerCase() === email) return problem('Informe o e-mail da conta da perita.');
     reviewer = body.email.toLowerCase();
   } else if (path === '/api/laudos/excluir') {
     if (role !== 'responsavel') return problem('Apenas o responsável pode excluir laudos.',403);
@@ -261,14 +261,39 @@ async function imageApi(request,env,path) {
 
 export default {
   async fetch(request,env) {
-    const user = await accessIdentity(request,env);
-    if (!user) return problem('Entre pelo endereço protegido pelo Cloudflare Access.',401);
     const path = new URL(request.url).pathname;
+    const settings = authSettings(env);
+    const supabaseMode = Boolean(env.AGENDA_SUPABASE_URL || env.AGENDA_SUPABASE_KEY);
+    if (supabaseMode && !settings) return problem('A configuração de login está incompleta.',503);
+    if (!settings) {
+      const user = await accessIdentity(request,env);
+      if (!user) return problem('Entre pelo endereço protegido pelo Cloudflare Access.',401);
+      return serveAgenda(request,env,path,user);
+    }
+    try {
+      if (path.startsWith('/auth/') && path!=='/auth/status') return await authAction(request,env,settings,path);
+      if (['/entrar','/login.js','/style.css'].includes(path)) return serveAsset(path==='/entrar'?'/login.html':path);
+      const {user,session} = await appSession(request,settings);
+      const response = user && await allowedAccount(env,user)
+        ? await serveAgenda(request,env,path,user)
+        : path.startsWith('/api/')
+          ? problem('Sessão encerrada. Entre novamente para continuar.',401)
+          : new Response(null,{status:302,headers:{...headers,Location:'/entrar'}});
+      return session===undefined ? response : sessionResponse(response,session);
+    } catch {return problem('O login está temporariamente indisponível.',503);}
+  }
+};
+
+async function serveAgenda(request,env,path,user) {
     if (path.startsWith('/api/')) {
       try { return await api(request,env,path,user); }
       catch { return problem('A agenda está temporariamente indisponível.',503); }
     }
-    const name = path === '/' ? '/index.html' : path;
+    if (path==='/auth/status') return json({passwordLogin:Boolean(authSettings(env))});
+    return serveAsset(path === '/' ? '/index.html' : path);
+}
+
+function serveAsset(name) {
     if (!Object.hasOwn(assets,name)) return new Response('Página inexistente.',{status:404,headers});
     const font = name.endsWith('.ttf');
     const photo = /\.(jpg|png)$/.test(name);
@@ -277,5 +302,4 @@ export default {
     const body = font || photo ? Uint8Array.from(atob(assets[name]), character => character.charCodeAt(0)) : assets[name];
     return new Response(body,{headers:{...headers,'Content-Type':type,
       'Content-Security-Policy':"default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'"}});
-  }
-};
+}

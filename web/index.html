@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agenda Pericial</title>
 <link rel="stylesheet" href="style.css?v=cloudflare-2">
-<header><div class="brand"><span>AP</span><div>Agenda Pericial<small>Gestão de laudos</small></div></div><div class="actions"><button type="button" id="import-config" hidden>Importar configurações</button><input type="file" id="config-file" accept=".json,application/json" hidden><span class="demo" id="account">Carregando</span><button id="perita" hidden>Configurar perita</button><button id="refresh">Atualizar</button></div></header>
+<header><div class="brand"><span>AP</span><div>Agenda Pericial<small>Gestão de laudos</small></div></div><div class="actions"><button type="button" id="import-config" hidden>Importar configurações</button><input type="file" id="config-file" accept=".json,application/json" hidden><span class="demo" id="account">Carregando</span><button id="perita" hidden>Configurar perita</button><button id="refresh">Atualizar</button><form method="post" action="/auth/sair" id="sign-out" hidden><button type="submit">Sair</button></form></div></header>
 <main>
 <section class="intro"><div><h1>Agenda de perícias</h1><p>Organize os processos por data e acompanhe cada laudo até a entrega.</p></div><button class="primary" id="new-date" disabled>＋ Nova data</button></section>
 <section class="stats" id="stats" aria-label="Resumo"></section>

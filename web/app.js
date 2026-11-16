@@ -304,3 +304,10 @@ $('urgent').addEventListener('change',render);
 render();
 refresh(false);
 setInterval(()=>refresh(false),30000);
+
+fetch('/auth/status').then(response=>response.ok ? response.json() : null).then(status=>{
+  if (status?.passwordLogin) $('sign-out').hidden = false;
+}).catch(()=>{});
+$('sign-out').onsubmit = event => {
+  if (($('dialog').open || pending) && !confirm('Alterações ainda não salvas podem ser perdidas. Sair da Agenda?')) event.preventDefault();
+};
