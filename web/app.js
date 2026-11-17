@@ -416,7 +416,8 @@ $('board').onclick = async event => {
     } finally {
       button.disabled = false;
     }
-    link.download = 'laudo-'+item.number.replace(/[^a-zA-Z0-9.-]/g,'_')+'.pdf';
+    const fileName = item.number.replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').replace(/[. ]+$/,'');
+    link.download = (fileName || 'processo')+'.pdf';
     link.click();
     setTimeout(()=>URL.revokeObjectURL(link.href),1000);
   }
