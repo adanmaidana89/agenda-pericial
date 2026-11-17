@@ -1,5 +1,6 @@
 const stageColors = {3:"review",4:"ready",5:"filed",6:"absent"};
 const labels = ['1 · Preparar minuta','2 · Exame médico','3 · Quesitos','4 · Revisão médica','5 · Pronto para entrega','Juntado','Faltou'];
+const stageFilters = {adan:[0,2,4,5,6],wes:[1,3,6]};
 const owners = ['Com você','Com a perita','Com você','Com a perita','Com você'];
 const $ = id => document.getElementById(id);
 const today = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Cuiaba'}).format(new Date());
@@ -34,7 +35,9 @@ async function sync(path='/api/agenda',body) {
     if (response.status===304) return;
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Falha na comunicação com a agenda.');
+    const previousRole = role;
     ({state,revision,role,reviewer} = data);
+    if (role!==previousRole) $('stage-filter').value = role==='perita' ? 'wes' : 'adan';
     documents.clear();
     for (const document of data.documents || []) documents.set(document.id,document);
     committed = new Map(state.cases.map(item=>[item.id,serialCase(item)]));
@@ -89,6 +92,7 @@ $('archive-view').onclick = () => {
 function render() {
   const query = $('search').value.trim().toLowerCase();
   const urgent = $('urgent').checked;
+  const stages = stageFilters[$('stage-filter').value];
   const archived = new Set(state.archivedDates ?? []);
   const activeCases = state.cases.filter(item=>!archived.has(item.date));
   $('board-title').textContent = archiveView ? 'Perícias arquivadas' : 'Perícias por data';
@@ -101,15 +105,15 @@ function render() {
   ].map(([label,value]) => '<div class="stat">'+label+'<strong>'+value+'</strong></div>').join('');
   $('board').innerHTML = state.dates.filter(date=>archived.has(date)===archiveView).sort().map(date => {
     const cases = state.cases.filter(item => item.date===date);
-    const visible = cases.filter(item => (!urgent || daysLeft(item)<=3) && (item.number+' '+item.vara).toLowerCase().includes(query));
+    const visible = cases.filter(item => (!stages || stages.includes(item.stage)) && (!urgent || daysLeft(item)<=3) && (item.number+' '+item.vara).toLowerCase().includes(query));
     if ((urgent || query) && !visible.length) return '';
     const addButton = archiveView ? '' : '<button data-add="'+date+'">＋ Processo</button>';
     const archiveButton = role!=='responsavel' ? '' : archiveView
       ? '<button data-restore-date="'+date+'">Restaurar</button>'
       : '<button data-archive-date="'+date+'">Arquivar</button>';
     const deleteButton = role==='responsavel' && !archiveView ? '<button class="danger" data-delete-date="'+date+'">Excluir data</button>' : '';
-    return '<section class="column"><div class="column-head"><div><h3>'+display(date)+'</h3><p>'+cases.length+' processo(s)</p></div><div class="actions">'+addButton+archiveButton+deleteButton+'</div></div>'+
-      (visible.map(card).join('') || '<p class="empty">Nenhum processo nesta data.</p>')+'</section>';
+    return '<section class="column"><div class="column-head"><div><h3>'+display(date)+'</h3><p>'+visible.length+' processo(s)</p></div><div class="actions">'+addButton+archiveButton+deleteButton+'</div></div>'+
+      (visible.map(card).join('') || '<p class="empty">'+(cases.length ? 'Nenhum processo no filtro selecionado.' : 'Nenhum processo nesta data.')+'</p>')+'</section>';
   }).join('') || '<p class="empty">'+(archiveView ? 'Nenhum processo arquivado encontrado.' : 'Nenhum processo encontrado.')+'</p>';
 }
 function card(item) {
@@ -128,27 +132,37 @@ function card(item) {
     ([4,5].includes(item.stage)?'<button type="button" data-convert="'+item.id+'">Converter em PDF</button>':'')+
     (item.converted?'<button type="button" data-download="'+item.id+'">Baixar PDF</button>':'')+'</div></article>';
 }
-function form(title, fields, submitLabel, submit, {stayOpen=false,toolbarClose=false}={}) {
+function form(title, fields, submitLabel, submit, {stayOpen=false,toolbarClose=false,canClose=()=>true,canSubmit=()=>true,onSubmitEnd}={}) {
   const close = toolbarClose ? '' : '<button type="button" data-dialog-close aria-label="Fechar">✕</button>';
   $('panel').innerHTML = '<form><div class="formhead"><h2>'+sanitize(title)+'</h2>'+close+'</div>'+fields+
     '<p class="error" role="alert"></p><div><button class="primary">'+submitLabel+'</button></div></form>';
   const element = $('panel').querySelector('form');
-  element.querySelector('[data-dialog-close]').onclick = () => $('dialog').close();
+  const dialog = $('dialog');
+  element.querySelector('[data-dialog-close]').onclick = () => {
+    if (canClose()) dialog.close();
+  };
+  dialog.oncancel = event => {
+    if (!canClose()) event.preventDefault();
+  };
+  let submitting = false;
   const savedStatus = element.querySelector('#editor-save-status');
   if (savedStatus) element.addEventListener('input',()=>{savedStatus.textContent = '';});
   element.onsubmit = async event => {
     event.preventDefault();
     const submitButtons = [...element.querySelectorAll('.primary, .editor-save')];
-    if (submitButtons.some(button=>button.disabled)) return;
+    if (submitting || !canSubmit()) return;
+    submitting = true;
     const before = structuredClone(state);
     const toolbarError = element.querySelector('#editor-save-error');
     element.querySelector('.error').textContent = '';
     if (toolbarError) toolbarError.hidden = true;
     if (savedStatus) savedStatus.textContent = '';
     for (const button of submitButtons) button.disabled = true;
+    let saved = false;
     try {
       const error = await submit(new FormData(element));
       if (error) throw new Error(error);
+      saved = true;
     } catch (error) {
       state = before;
       element.querySelector('.error').textContent = error.message;
@@ -158,13 +172,15 @@ function form(title, fields, submitLabel, submit, {stayOpen=false,toolbarClose=f
       }
       return;
     } finally {
+      submitting = false;
       for (const button of submitButtons) button.disabled = false;
+      onSubmitEnd?.(saved);
     }
     if (!stayOpen) $('dialog').close();
-    if (savedStatus) savedStatus.textContent = 'Laudo salvo.';
     render();
   };
-  $('dialog').showModal();
+  dialog.showModal();
+  return element;
 }
 $('new-date').onclick = () => form('Nova data','<label>Data da perícia<input type="date" name="date" value="'+today()+'" required></label><div class="row"><label>Comarca e vara<select name="vara"><option value="">Selecione a comarca e vara</option><option>Pontes e Lacerda - 1 Vara</option><option>Pontes e Lacerda - 2 Vara</option><option>Jauru</option><option>Vila Bela da Ssª. Trindade</option></select></label><label>Prazo de entrega<input type="date" name="due"></label></div>','Criar coluna', async data => {
   const date = data.get('date');
@@ -234,33 +250,83 @@ function edit(item) {
   const reportDetails = '<input type="hidden" name="date" value="'+sanitize(item.date)+'">'+
     '<input type="hidden" name="due" value="'+sanitize(item.due)+'">'+
     '<input type="hidden" name="vara" value="'+sanitize(item.vara)+'">';
-  form(item.number,reportDetails+editorFields(options)+history,'Salvar laudo', async data => {
+  let saving = false;
+  let firstSave = hasBlankReport(item);
+  const editorSnapshot = () => JSON.stringify(readEditor());
+  const hasUnsavedChanges = () => editorSnapshot()!==savedFormat ||
+    Number(element.elements.stage.value)!==savedStage || Boolean(editable.dataset.uploading);
+  const allowClose = () => {
+    if (saving) {
+      notice('Aguarde o salvamento do laudo.');
+      return false;
+    }
+    return !hasUnsavedChanges() || window.confirm('Há alterações não salvas no laudo. Fechar sem salvar?');
+  };
+  const element = form(item.number,reportDetails+editorFields(options)+history,'Salvar laudo', async data => {
     if ($('panel').querySelector('.report-body')?.dataset.uploading) return 'Aguarde o envio da imagem.';
+    saving = true;
     const index = state.cases.findIndex(entry=>entry.id===item.id);
-    item = {...item,...documents.get(item.id),...state.cases[index]};
-    state.cases[index] = item;
+    const record = {...item,...documents.get(item.id),...state.cases[index]};
+    state.cases[index] = record;
     const edited = readEditor();
-    const format = JSON.stringify(edited)===original ? item.format : edited;
-    const text = format ? reportText(format) : item.text;
+    const snapshot = JSON.stringify(edited);
+    const format = !firstSave && snapshot===savedFormat ? record.format : edited;
+    const text = format ? reportText(format) : record.text;
     if (!text.trim() && !format?.blocks.some(block=>block.image)) return 'Digite o texto do laudo.';
-    const formattingChanged = JSON.stringify(format ?? null)!==JSON.stringify(item.format ?? null);
+    const formattingChanged = JSON.stringify(format ?? null)!==JSON.stringify(record.format ?? null);
     const stage = Number(data.get('stage'));
-    const changed = formattingChanged || item.text!==text || item.date!==data.get('date') || item.vara!==data.get('vara').trim();
-    if (changed || stage<4 || stage===6) item.converted = false;
-    item.stage = stage;
-    item.text = text;
-    item.format = format;
-    item.date = data.get('date');
-    item.due = data.get('due');
-    item.vara = data.get('vara').trim();
-    if (!state.dates.includes(item.date)) state.dates.push(item.date);
+    const changed = formattingChanged || record.text!==text || record.date!==data.get('date') || record.vara!==data.get('vara').trim();
+    if (changed || stage<4 || stage===6) record.converted = false;
+    record.stage = stage;
+    record.text = text;
+    record.format = format;
+    record.date = data.get('date');
+    record.due = data.get('due');
+    record.vara = data.get('vara').trim();
+    if (!state.dates.includes(record.date)) state.dates.push(record.date);
     await save();
-    original = JSON.stringify(edited);
-    item = documents.get(item.id) || item;
+    savedFormat = snapshot;
+    savedStage = stage;
+    firstSave = false;
+    item = documents.get(record.id) || record;
     $('report-versions').innerHTML = versions(item);
-  },{stayOpen:true,toolbarClose:true});
+  },{
+    stayOpen:true,toolbarClose:true,
+    canClose:allowClose,
+    canSubmit:()=>!saving && (firstSave || hasUnsavedChanges()),
+    onSubmitEnd:saved=>{
+      saving = false;
+      const dirty = updateSaveButtons();
+      if (saved && !dirty) $('editor-save-status').textContent = 'Laudo salvo.';
+    }
+  });
   const readEditor = initEditor(item);
-  let original = hasBlankReport(item) ? null : JSON.stringify(readEditor());
+  const editable = element.querySelector('.report-body');
+  const buttons = element.querySelectorAll('.editor-save, .primary');
+  let savedFormat = editorSnapshot();
+  let savedStage = item.stage;
+  function updateSaveButtons() {
+    const dirty = hasUnsavedChanges();
+    for (const button of buttons) button.disabled = saving || (!firstSave && !dirty);
+    if (dirty) $('editor-save-status').textContent = '';
+    return dirty;
+  }
+  let frame = 0;
+  const scheduleUpdate = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(()=>{
+      frame = 0;
+      updateSaveButtons();
+    });
+  };
+  for (const event of ['input','change','click']) element.addEventListener(event,scheduleUpdate);
+  const observer = new MutationObserver(scheduleUpdate);
+  observer.observe(editable,{childList:true,subtree:true,characterData:true,attributes:true});
+  $('dialog').addEventListener('close',()=>{
+    observer.disconnect();
+    cancelAnimationFrame(frame);
+  },{once:true});
+  updateSaveButtons();
 }
 function confirmDeletion(title, message, submit) {
   form(title,message,'Excluir definitivamente',submit);
@@ -357,6 +423,7 @@ $('board').onclick = async event => {
 };
 $('search').addEventListener('input',render);
 $('urgent').addEventListener('change',render);
+$('stage-filter').addEventListener('change',render);
 render();
 refresh(false);
 setInterval(()=>refresh(false),30000);
