@@ -1,4 +1,4 @@
-const stageColors = {3:"review",4:"ready",5:"filed",6:"absent"};
+const stageColors = {1:"exam",2:"questions",3:"review",4:"ready",5:"filed",6:"absent"};
 const labels = ['1 · Preparar minuta','2 · Exame médico','3 · Quesitos','4 · Revisão médica','5 · Pronto para entrega','Juntado','Faltou'];
 const stageFilters = {adan:[0,2,4,5,6],wes:[1,3,6]};
 const owners = ['Com você','Com a perita','Com você','Com a perita','Com você'];

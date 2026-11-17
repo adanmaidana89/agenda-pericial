@@ -59,3 +59,6 @@ button.danger{color:#971c34;border-color:#ebb3bd}button.danger:hover{background:
   line-height:1;
 }
 .process-card-tools svg { display:block; }
+
+.stage-exam { background:#fbd9e9; color:#82254e; }
+.stage-questions { background:#e9dcff; color:#593186; }
