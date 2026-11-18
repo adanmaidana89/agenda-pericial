@@ -632,6 +632,25 @@ function initEditor(item) {
     }
     return merged;
   }
+  editable.addEventListener('copy',event=>{
+    if (!extraSelections.length || !event.clipboardData) return;
+    const paragraphs = sheetNodes(editable);
+    const text = combinedSelections().map(selection=>{
+      const points = editorSelectionPoints(editable,selection);
+      if (!points) return '';
+      const [startNode,startOffset,endNode,endOffset] = points;
+      return paragraphs.slice(selection.anchor.index,selection.focus.index+1).map((paragraph,index,group)=>{
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        if (index===0) range.setStart(startNode,startOffset);
+        if (index===group.length-1) range.setEnd(endNode,endOffset);
+        return range.toString();
+      }).join('\n');
+    }).filter(Boolean).join('\n');
+    if (!text) return;
+    event.clipboardData.setData('text/plain',text);
+    event.preventDefault();
+  });
   function paintExtraSelections() {
     if (!window.CSS?.highlights || typeof Highlight!=='function') return;
     const ranges = [];
