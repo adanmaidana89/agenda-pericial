@@ -1,6 +1,7 @@
 const highlightColors = {16:'#fff176',32:'#a6e6a1',64:'#ffabab'};
 const highlightNames = {16:'amarelo',32:'verde',64:'vermelho'};
 const fontFamilies = {garamond:'"EB Garamond", serif', times:'"Times New Roman", serif', arial:'Arial, sans-serif'};
+const inlineShortcuts = {b:'bold',u:'underline',i:'italic'};
 const fontSizes = [10,11,12,13,14,16,18];
 const defaultPaper = {family:'garamond',size:12,color:'#ffffff',watermark:'',paper:'simple',left:2,right:2,spacing:1.45,after:0};
 const textBlocks = text => text.split(/\r?\n/).map(line=>({align:'left',runs:line?[{text:line,style:0}]:[]}));
@@ -479,8 +480,7 @@ function editorSelection(editable) {
   return anchor && focus ? {anchor,focus} : null;
 }
 
-function restoreEditorSelection(editable,saved) {
-  if (!saved) return;
+function editorSelectionPoints(editable,saved) {
   const paragraphs = sheetNodes(editable);
   function locate(position) {
     const paragraph = paragraphs[position.index];
@@ -496,7 +496,12 @@ function restoreEditorSelection(editable,saved) {
   }
   const anchor = locate(saved.anchor);
   const focus = locate(saved.focus);
-  if (anchor && focus) window.getSelection().setBaseAndExtent(...anchor,...focus);
+  return anchor && focus ? [...anchor,...focus] : null;
+}
+
+function restoreEditorSelection(editable,saved) {
+  const points = saved && editorSelectionPoints(editable,saved);
+  if (points) window.getSelection().setBaseAndExtent(...points);
 }
 
 function editorHistory(read,restore,selection) {
@@ -565,6 +570,7 @@ function initEditor(item) {
       frame = 0;
       paginateEditor(editable,settings);
       updateRuler();
+      paintExtraSelections();
     });
   };
   const style = () => {
@@ -597,12 +603,106 @@ function initEditor(item) {
       if (alignment) {
         for (const paragraph of selectedParagraphs()) paragraph.style.textAlign = alignment;
       } else {
-        editable.focus();
-        document.execCommand(command,false);
+        applyInlineCommand(command);
       }
       schedulePages();
     };
   }
+  const extraSelections = [];
+  const highlightKey = 'laudo-selecao-multipla';
+  const comparePoints = (a,b) => a.index-b.index || a.offset-b.offset;
+  function selectedText() {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || selection.isCollapsed ||
+        !editable.contains(selection.anchorNode) || !editable.contains(selection.focusNode)) return null;
+    const saved = editorSelection(editable);
+    if (!saved) return null;
+    const {anchor,focus} = saved;
+    return comparePoints(anchor,focus)<=0 ? saved : {anchor:focus,focus:anchor};
+  }
+  function combinedSelections() {
+    const active = selectedText();
+    const sorted = (active ? [...extraSelections,active] : [...extraSelections])
+      .sort((a,b)=>comparePoints(a.anchor,b.anchor));
+    const merged = [];
+    for (const selection of sorted) {
+      const last = merged.at(-1);
+      if (!last || comparePoints(selection.anchor,last.focus)>0) merged.push({...selection});
+      else if (comparePoints(selection.focus,last.focus)>0) last.focus = selection.focus;
+    }
+    return merged;
+  }
+  function paintExtraSelections() {
+    if (!window.CSS?.highlights || typeof Highlight!=='function') return;
+    const ranges = [];
+    for (const selection of extraSelections) {
+      const points = editorSelectionPoints(editable,selection);
+      if (!points) continue;
+      const range = document.createRange();
+      range.setStart(points[0],points[1]);
+      range.setEnd(points[2],points[3]);
+      ranges.push(range);
+    }
+    if (ranges.length) CSS.highlights.set(highlightKey,new Highlight(...ranges));
+    else CSS.highlights.delete(highlightKey);
+  }
+  function clearExtraSelections() {
+    extraSelections.length = 0;
+    window.CSS?.highlights?.delete(highlightKey);
+  }
+  function applyInlineCommand(command) {
+    const selections = extraSelections.length ? combinedSelections() : [];
+    editable.focus({preventScroll:true});
+    if (!selections.length) {
+      document.execCommand(command,false);
+      return;
+    }
+    const enabled = selections.every(selection=>{
+      restoreEditorSelection(editable,selection);
+      return document.queryCommandState(command);
+    });
+    for (const selection of selections.toReversed()) {
+      restoreEditorSelection(editable,selection);
+      if (document.queryCommandState(command)===enabled) document.execCommand(command,false);
+    }
+    extraSelections.splice(0,extraSelections.length,...selections.slice(0,-1));
+    restoreEditorSelection(editable,selections.at(-1));
+    paintExtraSelections();
+  }
+  editable.addEventListener('pointerdown',event=>{
+    if (event.button!==0) return;
+    if (!event.ctrlKey && !event.metaKey) {
+      clearExtraSelections();
+      return;
+    }
+    const previous = selectedText();
+    if (previous) extraSelections.push(previous);
+    paintExtraSelections();
+  });
+  editable.addEventListener('mouseup',event=>{
+    if (event.button!==0 || (!event.ctrlKey && !event.metaKey)) return;
+    requestAnimationFrame(()=>{
+      if (!root.isConnected || !root.closest('dialog')?.open) return;
+      const selection = window.getSelection();
+      const node = selection?.anchorNode;
+      if (selection?.isCollapsed && node?.nodeType===3 && editable.contains(node)) {
+        const offset = selection.anchorOffset;
+        const word = [...node.data.matchAll(/[\p{L}\p{M}\p{N}_]+/gu)]
+          .find(match=>offset>=match.index && offset<=match.index+match[0].length);
+        if (word) selection.setBaseAndExtent(node,word.index,node,word.index+word[0].length);
+      }
+      paintExtraSelections();
+    });
+  });
+  editable.addEventListener('beforeinput',event=>{
+    if (!event.inputType?.startsWith('format')) clearExtraSelections();
+  });
+  editable.addEventListener('keydown',event=>{
+    if (event.key==='Escape' && extraSelections.length) {
+      event.preventDefault();
+      clearExtraSelections();
+    } else if (event.key.startsWith('Arrow') && !event.ctrlKey && !event.metaKey) clearExtraSelections();
+  });
   let remembered = [];
   let lastTextRange = null;
   function selectedParagraphs() {
@@ -1087,6 +1187,7 @@ function initEditor(item) {
   root.closest('dialog').addEventListener('close',()=>{
     root.closest('dialog')?.classList.remove('expanded-editor');
     observer.disconnect();
+    clearExtraSelections();
     document.removeEventListener('selectionchange',trackSelection);
     cancelAnimationFrame(frame);
   },{once:true});
@@ -1165,6 +1266,7 @@ function initEditor(item) {
     for (const key of Object.keys(settings)) settings[key].value = format[key];
     for (const key of ['spacing','after']) $('paragraph-'+key).value = settings[key].value;
     fillEditor(editable,format.blocks);
+    clearExtraSelections();
     lastTextRange = null;
     style();
     editable.focus();
@@ -1217,6 +1319,7 @@ function initEditor(item) {
     for (const key of ['spacing','after']) $('paragraph-'+key).value = settings[key].value;
     fillEditor(editable,format.blocks);
     remembered = [];
+    clearExtraSelections();
     lastTextRange = null;
     editable.focus({preventScroll:true});
     restoreEditorSelection(editable,selection);
@@ -1227,6 +1330,15 @@ function initEditor(item) {
   root.addEventListener('keydown',event=>{
     if (!(event.ctrlKey||event.metaKey) || event.altKey || event.isComposing) return;
     const key = event.key.toLowerCase();
+    const command = inlineShortcuts[key];
+    if (command && !event.shiftKey && editable.contains(event.target)) {
+      event.preventDefault();
+      history.rememberBefore();
+      applyInlineCommand(command);
+      history.record();
+      schedulePages();
+      return;
+    }
     if (key!=='z' && key!=='y') return;
     event.preventDefault();
     history.step(key==='y' || event.shiftKey?1:-1);

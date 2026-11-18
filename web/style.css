@@ -62,3 +62,5 @@ button.danger{color:#971c34;border-color:#ebb3bd}button.danger:hover{background:
 
 .stage-exam { background:#fbd9e9; color:#82254e; }
 .stage-questions { background:#e9dcff; color:#593186; }
+
+::highlight(laudo-selecao-multipla) { background-color:#c9dcff; }
