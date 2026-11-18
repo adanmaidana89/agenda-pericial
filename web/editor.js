@@ -44,7 +44,7 @@ function editorFields(stageOptions) {
     '<div class="editor-tools layout-tools" aria-label="Layout">'+
     '<button type="button" id="report-break">Quebra de página</button><button type="button" id="report-indent">Aumentar recuo</button><button type="button" id="report-outdent">Diminuir recuo</button>'+
     '<input type="hidden" id="report-spacing"><input type="hidden" id="report-after"><label>Entrelinhas<select id="paragraph-spacing"><option value="1">Simples</option><option value="1.15">1,15</option><option value="1.45">1,45</option><option value="1.5">1,5</option><option value="2">Duplo</option></select></label>'+
-    '<label>Após parágrafo<select id="paragraph-after"><option value="0">0 pt</option><option value="6">6 pt</option><option value="12">12 pt</option></select></label></div>'+
+    '<label>Após parágrafo<select id="paragraph-after"><option value="0">0 pt</option><option value="6">6 pt</option><option value="12">12 pt</option></select></label><button type="button" id="toggle-paragraph-after">Adicionar espaço depois do parágrafo</button></div>'+
     '<div class="report-ruler" aria-label="Régua em centímetros">'+Array.from({length:22},(_,index)=>'<span>'+index+'</span>').join('')+
     '<button type="button" id="ruler-marker" class="ruler-handle" role="slider" aria-label="Posição da numeração" title="Arraste a numeração" aria-valuemin="0" aria-valuemax="21" aria-valuenow="0" hidden></button>'+
     '<button type="button" id="ruler-text" class="ruler-handle" role="slider" aria-label="Início do texto numerado" title="Arraste o início do texto" aria-valuemin="0" aria-valuemax="21" aria-valuenow="0" hidden></button></div>'+
@@ -571,6 +571,7 @@ function initEditor(item) {
       paginateEditor(editable,settings);
       updateRuler();
       paintExtraSelections();
+      updateAfterToggle();
     });
   };
   const style = () => {
@@ -831,6 +832,7 @@ function initEditor(item) {
     $('list-gap').value = remembered[0]?.dataset.gap || 0;
     showGap();
     updateRuler();
+    updateAfterToggle();
   }
   document.addEventListener('selectionchange',trackSelection);
   editable.addEventListener('dblclick',event=>{
@@ -880,6 +882,34 @@ function initEditor(item) {
       style();
     };
   }
+  const afterToggle = $('toggle-paragraph-after');
+  function spacingTargets() {
+    if (!extraSelections.length) return selectedParagraphs().filter(paragraph=>!paragraph.dataset.image);
+    const paragraphs = sheetNodes(editable);
+    const targets = new Set();
+    for (const {anchor,focus} of combinedSelections()) {
+      const end = focus.index + (focus.offset>0 || anchor.index===focus.index ? 1 : 0);
+      for (const paragraph of paragraphs.slice(anchor.index,end)) {
+        if (paragraph.nodeType===1 && paragraph.tagName!=='BR' && !paragraph.dataset.image) targets.add(paragraph);
+      }
+    }
+    return [...targets];
+  }
+  const hasAfterSpace = paragraphs => paragraphs.length>0 &&
+    paragraphs.every(paragraph=>Number(paragraph.dataset.after ?? settings.after.value)>0);
+  function updateAfterToggle() {
+    afterToggle.textContent = (hasAfterSpace(spacingTargets())?'Remover':'Adicionar')+' espaço depois do parágrafo';
+  }
+  afterToggle.onmousedown = event => event.preventDefault();
+  afterToggle.onclick = () => {
+    const paragraphs = spacingTargets();
+    if (!paragraphs.length) return notice('Posicione o cursor no parágrafo ou selecione o texto.');
+    const after = hasAfterSpace(paragraphs) ? 0 : 6;
+    for (const paragraph of paragraphs) setParagraphSpacing(paragraph,undefined,after);
+    $('paragraph-after').value = String(after);
+    updateAfterToggle();
+    schedulePages();
+  };
   function currentTextRange() {
     const selection = window.getSelection();
     if (selection?.rangeCount && editable.contains(selection.anchorNode) && editable.contains(selection.focusNode)) return selection.getRangeAt(0);
