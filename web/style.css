@@ -64,3 +64,11 @@ button.danger{color:#971c34;border-color:#ebb3bd}button.danger:hover{background:
 .stage-questions { background:#e9dcff; color:#593186; }
 
 ::highlight(laudo-selecao-multipla) { background-color:#c9dcff; }
+
+.process-card-status { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.process-card-status .edit-report { background:#354497; border-color:#354497; color:white; flex-shrink:0; padding:4px 8px; }
+.process-card-status .edit-report:hover { background:#293878; }
+#refresh { background:#ed8b23; border-color:#ed8b23; color:#fff; }
+#refresh:hover { background:#cf7111; }
+.process-card > .actions:empty { display:none; }
+.process-card .deadline { margin:4px 0; }

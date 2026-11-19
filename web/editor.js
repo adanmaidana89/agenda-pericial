@@ -23,7 +23,7 @@ function editorFields(stageOptions) {
     '<div class="editor-toolbar-sticky"><div class="editor-controls-toggle"><button type="button" id="editor-controls-toggle" aria-controls="editor-controls" aria-expanded="false">Mostrar ferramentas de edição</button><button type="submit" class="editor-save">Salvar laudo</button><button type="button" id="report-expand" aria-pressed="false">Expandir editor</button><label class="editor-stage">Etapa <select name="stage">'+stageOptions+'</select></label><button type="button" data-dialog-close class="editor-close" aria-label="Fechar laudo" title="Fechar laudo">✕</button></div><p id="editor-save-error" class="error" role="alert" hidden></p><p id="editor-save-status" class="editor-save-status" role="status"></p>'+
     '<div id="editor-controls" hidden>'+
     '<div class="row editor-template"><label>Modelos salvos<span class="model-picker"><select id="saved-models"></select><button type="button" id="delete-model" class="danger" aria-label="Excluir modelo selecionado" title="Excluir modelo selecionado">×</button></span></label>'+
-    '<div class="actions"><button type="button" id="load-model">Carregar modelo</button><button type="button" id="default-model">Usar na abertura</button><button type="button" id="save-model">Salvar como modelo</button></div></div>'+
+    '<div class="actions"><button type="button" id="load-model">Carregar modelo</button><button type="button" id="default-model">Usar na abertura</button><button type="button" id="save-model">Salvar como modelo</button><button type="button" id="update-model">Salvar alterações no modelo</button></div></div>'+
     '<div class="row paper-settings">'+
     '<label>Papel<select id="report-paper"><option value="simple">Liso</option><option value="letterhead">Timbrado</option></select></label>'+
     '<input type="hidden" id="report-family"><label>Fonte<select id="selection-family"><option value="">Selecione a fonte</option><option value="garamond">EB Garamond</option><option value="times">Times New Roman</option><option value="arial">Arial</option></select></label>'+
@@ -1292,10 +1292,12 @@ function initEditor(item) {
   const selectModel = $('saved-models');
   const loadModel = $('load-model');
   const saveModel = $('save-model');
+  const updateModel = $('update-model');
   const deleteModel = $('delete-model');
   const defaultModel = $('default-model');
   function updateModelButtons() {
     loadModel.disabled = deleteModel.disabled = defaultModel.disabled = !selectModel.value;
+    updateModel.disabled = !selectModel.value;
     defaultModel.textContent = selectModel.value && selectModel.value===state.defaultModel ? 'Remover da abertura' : 'Usar na abertura';
   }
   function listModels(selected=selectModel.value || state.defaultModel) {
@@ -1343,7 +1345,7 @@ function initEditor(item) {
     } catch (error) {notice(error.message);}
     finally {updateModelButtons();}
   };
-  saveModel.onclick = async () => {
+  function reusableModelFormat() {
     const format = readEditor();
     const vara = dialogForm.elements.vara.value.trim();
     const date = dialogForm.elements.date.value;
@@ -1352,6 +1354,23 @@ function initEditor(item) {
       if (vara) run.text = run.text.replaceAll('Juízo: '+vara,'Juízo: {{VARA}}').replaceAll('AO JUÍZO — '+vara,'AO JUÍZO — {{VARA}}');
       if (date) run.text = run.text.replaceAll('Perícia médica realizada em '+display(date),'Perícia médica realizada em {{DATA}}');
     }
+    return format;
+  }
+  updateModel.onclick = async () => {
+    const model = (state.models || []).find(entry=>entry.id===selectModel.value);
+    if (!model || editable.dataset.uploading) return notice('Selecione o modelo e aguarde o envio de imagens.');
+    if (!window.confirm('Atualizar o modelo "'+model.name+'" com o conteúdo atual do editor? Confira os dados específicos do processo antes de continuar.')) return;
+    const format = reusableModelFormat();
+    updateModel.disabled = true;
+    try {
+      await sync('/api/modelos/atualizar',{id:model.id,format});
+      listModels(model.id);
+      notice('Modelo atualizado.');
+    } catch (error) {notice(error.message);}
+    finally {updateModelButtons();}
+  };
+  saveModel.onclick = async () => {
+    const format = reusableModelFormat();
     if (!reportText(format).trim()) return notice('Preencha o texto antes de salvar como modelo.');
     const name = window.prompt('Nome do novo modelo. Use texto reaproveitável e retire dados específicos do caso.');
     if (!name?.trim()) return;

@@ -227,6 +227,12 @@ async function api(request,env,path,user) {
       agenda.models = models.filter(item=>item.id!==model.id);
       if (agenda.defaultModel===model.id) delete agenda.defaultModel;
     }
+  } else if (path === '/api/modelos/atualizar') {
+    const model = agenda.models?.find(entry=>entry.id===body.id);
+    if (!model) return problem('Modelo não encontrado.',404);
+    const format = reportFormat(body.format);
+    if (!format || !format.blocks.some(block=>block.image || block.runs.some(run=>run.text.trim()))) return problem('Informe um modelo válido.');
+    model.format = format;
   } else if (path === '/api/modelos') {
     if (!string(body.name,100) || !body.name.trim()) return problem('Informe um nome de até 100 caracteres.');
     const name = body.name.trim();

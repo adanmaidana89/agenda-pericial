@@ -1,7 +1,6 @@
 const stageColors = {1:"exam",2:"questions",3:"review",4:"ready",5:"filed",6:"absent"};
 const labels = ['1 · Preparar minuta','2 · Exame médico','3 · Quesitos','4 · Revisão médica','5 · Pronto para entrega','Juntado','Faltou'];
 const stageFilters = {adan:[0,2,4,5,6],wes:[1,3,6]};
-const owners = ['Com você','Com a perita','Com você','Com a perita','Com você'];
 const $ = id => document.getElementById(id);
 const today = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Cuiaba'}).format(new Date());
 const display = date => date.split('-').reverse().join('/');
@@ -119,16 +118,15 @@ function render() {
 function card(item) {
   const days = archiveView ? Infinity : daysLeft(item);
   const status = days < 0 ? 'Atrasado' : days === 0 ? 'Vence hoje' : days <= 3 ? 'Vence em '+days+' dia(s)' : '';
-  const assigned = (role==='perita' ? ['Com o responsável','Com você','Com o responsável','Com você','Com o responsável'] : owners)[item.stage];
   const remove = role==='responsavel' && !archiveView ? '<button type="button" class="danger card-delete" data-delete="'+item.id+'" aria-label="Excluir laudo" title="Excluir laudo">×</button>' : '';
   const link = caseLink(item.link);
   const openCase = link ? '<a class="case-link" href="'+sanitize(link)+'" target="_blank" rel="noopener noreferrer" aria-label="Abrir autos do processo" title="Abrir autos do processo"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10 8l3-3a4 4 0 0 1 6 6l-3 3M14 16l-3 3a4 4 0 0 1-6-6l3-3m1 5 6-6"/></svg></a>' : '';
   const editCaseButton = '<button type="button" class="case-link" data-edit-case="'+item.id+'" aria-label="Editar processo" title="Editar processo"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6"/><path d="m10 14 1-4 7-7 3 3-7 7-4 1z"/></svg></button>';
   return '<article class="card process-card"><div class="process-card-title"><div><strong>'+sanitize(item.number)+'</strong>'+
     '<p class="meta">'+sanitize(item.vara || 'Vara a informar')+'</p></div><div class="process-card-tools">'+openCase+editCaseButton+remove+'</div></div>'+
-    '<div class="process-card-status"><span class="tag stage-'+(stageColors[item.stage]||'normal')+'">'+labels[item.stage]+'</span>'+(assigned?'<span class="meta">'+assigned+'</span>':'')+'</div>'+
+    '<div class="process-card-status"><span class="tag stage-'+(stageColors[item.stage]||'normal')+'">'+labels[item.stage]+'</span><button type="button" class="edit-report" data-edit="'+item.id+'">Editar laudo</button></div>'+
     '<p class="deadline '+(days<0?'late':days<=3?'soon':'')+'">'+(item.due ? 'Entrega em '+display(item.due) : 'Prazo a definir')+(status?' · '+status:'')+'</p>'+
-    '<div class="actions"><button type="button" data-edit="'+item.id+'">Editar laudo</button>'+
+    '<div class="actions">'+
     ([4,5].includes(item.stage)?'<button type="button" data-convert="'+item.id+'">Converter em PDF</button>':'')+
     (item.converted?'<button type="button" data-download="'+item.id+'">Baixar PDF</button>':'')+'</div></article>';
 }
