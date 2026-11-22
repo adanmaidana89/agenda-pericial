@@ -55,7 +55,7 @@ async function createFormattedPdf(report) {
       page.drawImage(letterhead,{x:0,y:0,width,height});
       const label = String(doc.getPageCount());
       page.drawText(label,{x:(width-fonts[0].widthOfTextAtSize(label,14))/2,y:35,size:14,font:fonts[0],color:rgb(.45,.42,.33)});
-    } else page.drawRectangle({x:0,y:0,width,height,color:paper});
+    } else page.drawRectangle({x:0,y:0,width,height,color:paper,borderWidth:0});
     const watermark = clean(report.watermark,fonts[1]);
     if (watermark) {
       const font = fonts[1];
