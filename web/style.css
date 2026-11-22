@@ -70,3 +70,19 @@ button.danger{color:#971c34;border-color:#ebb3bd}button.danger:hover{background:
 .process-card-status .edit-report:hover { background:#f0f2ff; }
 .process-card > .actions:empty { display:none; }
 .process-card .deadline { margin:4px 0; }
+
+.intro .report-link {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px 12px;
+  border:1px solid #d9deef;
+  border-radius:8px;
+  background:white;
+  color:#293663;
+  font-size:13px;
+  font-weight:650;
+  text-decoration:none;
+  white-space:nowrap;
+}
+.intro .report-link:hover { background:#f0f2ff; }
