@@ -18,6 +18,39 @@ function reportFromModel(item, form, model) {
 }
 const reportText = report => report.blocks.map(block=>block.runs.map(run=>run.text).join('')).join('\n');
 
+function clipboardParagraphs(clipboard) {
+  const plain = clipboard.getData('text/plain').replace(/\r\n?/g,'\n');
+  const html = clipboard.getData('text/html');
+  if (!html) return plain.split('\n');
+  const parsed = new DOMParser().parseFromString(html,'text/html');
+  parsed.querySelectorAll('script,style,meta,link,noscript').forEach(node=>node.remove());
+  const blocks = new Set(['P','DIV','LI','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','PRE','TR']);
+  const lines = [];
+  let current = '';
+  function finish(force=false) {
+    if (force || current) lines.push(current);
+    current = '';
+  }
+  function visit(node) {
+    if (node.nodeType===3) {
+      const text = node.textContent.replace(/\u00a0/g,' ');
+      if (!text.trim() && /[\r\n]/.test(text)) return;
+      current += text.replace(/[\r\n]+/g,' ');
+      return;
+    }
+    if (node.nodeType!==1) return;
+    if (node.tagName==='BR') {finish(true);return;}
+    const block = blocks.has(node.tagName);
+    if (block) finish();
+    const before = lines.length;
+    for (const child of node.childNodes) visit(child);
+    if (block) finish(lines.length===before);
+  }
+  for (const node of parsed.body.childNodes) visit(node);
+  finish();
+  return lines.length ? lines : plain.split('\n');
+}
+
 function editorFields(stageOptions) {
   return '<section class="report-editor" aria-label="Editor do laudo">'+
     '<div class="editor-toolbar-sticky"><div class="editor-controls-toggle"><button type="button" id="editor-controls-toggle" aria-controls="editor-controls" aria-expanded="false">Mostrar ferramentas de edição</button><button type="submit" class="editor-save">Salvar laudo</button><button type="button" id="report-expand" aria-pressed="false">Expandir editor</button><label class="editor-stage">Etapa <select name="stage">'+stageOptions+'</select></label><button type="button" data-dialog-close class="editor-close" aria-label="Fechar laudo" title="Fechar laudo">✕</button></div><p id="editor-save-error" class="error" role="alert" hidden></p><p id="editor-save-status" class="editor-save-status" role="status"></p>'+
@@ -1050,8 +1083,10 @@ function initEditor(item) {
   }
   const brush = $('format-brush');
   let copiedFormat = null;
+  let shortcutBrush = false;
   brush.onmousedown = event => event.preventDefault();
   brush.onclick = () => {
+    shortcutBrush = false;
     if (copiedFormat) {
       copiedFormat = null;
       brush.setAttribute('aria-pressed','false');
@@ -1115,9 +1150,9 @@ function initEditor(item) {
       brush.title = 'Pincel de formatação';
     }
   }
-  editable.addEventListener('pointerup',applyFormatBrush);
+  editable.addEventListener('pointerup',()=>{if (!shortcutBrush) applyFormatBrush();});
   editable.addEventListener('keyup',event=>{
-    if (event.shiftKey && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)) applyFormatBrush();
+    if (!shortcutBrush && event.shiftKey && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)) applyFormatBrush();
   });
   const activeParagraph = () => selectedParagraphs()[0] ?? null;
   function toggleBreak() {
@@ -1255,7 +1290,15 @@ function initEditor(item) {
     const image = files.find(file=>file.type.startsWith('image/')) ||
       [...(event.clipboardData?.items || [])].find(item=>item.kind==='file' && item.type.startsWith('image/'))?.getAsFile();
     if (!image) {
-      document.execCommand('insertText',false,event.clipboardData.getData('text/plain'));
+      history.rememberBefore();
+      const paragraphs = clipboardParagraphs(event.clipboardData);
+      if (paragraphs.length===1) document.execCommand('insertText',false,paragraphs[0]);
+      else {
+        const html = paragraphs.map(text=>'<div>'+(text ? sanitize(text) : '<br>')+'</div>').join('');
+        document.execCommand('insertHTML',false,html);
+      }
+      schedulePages();
+      history.record();
       return;
     }
     if (editable.dataset.uploading) return;
@@ -1398,6 +1441,23 @@ function initEditor(item) {
   root.addEventListener('keydown',event=>{
     if (!(event.ctrlKey||event.metaKey) || event.altKey || event.isComposing) return;
     const key = event.key.toLowerCase();
+    if (key==='c' && event.shiftKey && editable.contains(event.target)) {
+      event.preventDefault();
+      if (event.repeat) return;
+      history.rememberBefore();
+      if (copiedFormat) {
+        applyFormatBrush();
+        if (!copiedFormat) shortcutBrush = false;
+        else notice('Selecione o trecho de destino para aplicar a formatação.');
+      } else {
+        brush.onclick();
+        shortcutBrush = Boolean(copiedFormat);
+        if (shortcutBrush) notice('Formatação copiada. Selecione o destino e pressione Ctrl+Shift+C novamente.');
+      }
+      history.record();
+      schedulePages();
+      return;
+    }
     const command = inlineShortcuts[key];
     if (command && !event.shiftKey && editable.contains(event.target)) {
       event.preventDefault();
