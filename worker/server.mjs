@@ -92,7 +92,7 @@ function clean(next, previous, role) {
     if (!old || textChanged || old.stage !== stage || old.due !== due) {
       history.unshift({stage,role,at:new Date().toISOString(),text});
     }
-    cases.push({id,number,date:exam,due,vara,text,format,stage,converted,...(link?{link}:{}),history:history.slice(0,8)});
+    cases.push({id,number,date:exam,due,vara,text,format,stage,converted,downloaded:old?.downloaded===true || (converted && value.downloaded===true),...(link?{link}:{}),history:history.slice(0,8)});
     ids.add(id);
     numbers.add(number);
   }

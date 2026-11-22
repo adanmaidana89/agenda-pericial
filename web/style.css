@@ -86,3 +86,8 @@ button.danger{color:#971c34;border-color:#ebb3bd}button.danger:hover{background:
   white-space:nowrap;
 }
 .intro .report-link:hover { background:#f0f2ff; }
+
+.process-card button.pdf-downloaded { background:#d7f2de; border-color:#bde5c8; color:#185533; }
+.process-card button.pdf-downloaded:hover { background:#c5eace; }
+.intro .report-link { background:#238636; border-color:#238636; color:white; }
+.intro .report-link:hover { background:#1b702c; border-color:#1b702c; }

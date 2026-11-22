@@ -128,7 +128,7 @@ function card(item) {
     '<p class="deadline '+(days<0?'late':days<=3?'soon':'')+'">'+(item.due ? 'Entrega em '+display(item.due) : 'Prazo a definir')+(status?' · '+status:'')+'</p>'+
     '<div class="actions">'+
     ([4,5].includes(item.stage)?'<button type="button" data-convert="'+item.id+'">Converter em PDF</button>':'')+
-    (item.converted?'<button type="button" data-download="'+item.id+'">Baixar PDF</button>':'')+'</div></article>';
+    (item.converted?'<button type="button" class="'+(item.downloaded?'pdf-downloaded':'')+'" data-download="'+item.id+'">Baixar PDF</button>':'')+'</div></article>';
 }
 function form(title, fields, submitLabel, submit, {stayOpen=false,toolbarClose=false,canClose=()=>true,canSubmit=()=>true,onSubmitEnd}={}) {
   const close = toolbarClose ? '' : '<button type="button" data-dialog-close aria-label="Fechar">✕</button>';
@@ -418,6 +418,18 @@ $('board').onclick = async event => {
     link.download = (fileName || 'processo')+'.pdf';
     link.click();
     setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+    const current = state.cases.find(entry=>entry.id===item.id);
+    if (current && !current.downloaded) {
+      current.downloaded = true;
+      button.disabled = true;
+      try {
+        await save();
+      } catch (error) {
+        current.downloaded = false;
+        notice('O PDF foi enviado para download, mas a marcação não foi salva. '+error.message);
+      } finally {button.disabled = false;}
+      render();
+    }
   }
 };
 $('search').addEventListener('input',render);
