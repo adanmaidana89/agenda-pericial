@@ -1093,6 +1093,9 @@ function initEditor(item) {
       brush.title = 'Pincel de formatação';
       return;
     }
+    copyFormatBrush();
+  };
+  function copyFormatBrush() {
     const range = currentTextRange();
     const source = range?.startContainer;
     if (!source || !editable.contains(source)) return notice('Selecione o trecho cuja formatação deseja copiar.');
@@ -1117,7 +1120,7 @@ function initEditor(item) {
     brush.setAttribute('aria-pressed','true');
     brush.title = 'Cancelar pincel';
     notice('Selecione o trecho de destino para aplicar a formatação.');
-  };
+  }
   function applyFormatBrush() {
     if (!copiedFormat) return;
     const selection = window.getSelection();
@@ -1445,21 +1448,21 @@ function initEditor(item) {
   root.addEventListener('keydown',event=>{
     if (!(event.ctrlKey||event.metaKey) || event.altKey || event.isComposing) return;
     const key = event.key.toLowerCase();
-    if (key==='c' && event.shiftKey && editable.contains(event.target)) {
+    if (event.shiftKey && (key==='c' || key==='v') && editable.contains(event.target)) {
       event.preventDefault();
       if (event.repeat) return;
-      history.rememberBefore();
-      if (copiedFormat) {
+      if (key==='c') {
+        copyFormatBrush();
+        shortcutBrush = Boolean(copiedFormat);
+        if (shortcutBrush) notice('Formatação copiada. Selecione o destino e pressione Ctrl+Shift+V.');
+      } else if (copiedFormat) {
+        history.rememberBefore();
         applyFormatBrush();
+        history.record();
         if (!copiedFormat) shortcutBrush = false;
         else notice('Selecione o trecho de destino para aplicar a formatação.');
-      } else {
-        brush.onclick();
-        shortcutBrush = Boolean(copiedFormat);
-        if (shortcutBrush) notice('Formatação copiada. Selecione o destino e pressione Ctrl+Shift+C novamente.');
-      }
-      history.record();
-      schedulePages();
+        schedulePages();
+      } else notice('Copie uma formatação com Ctrl+Shift+C primeiro.');
       return;
     }
     const command = inlineShortcuts[key];
