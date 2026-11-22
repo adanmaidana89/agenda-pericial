@@ -1099,7 +1099,9 @@ function initEditor(item) {
     const chain = [];
     let node = source.nodeType===1 ? source : source.parentElement;
     for (;node && node!==editable;node=node.parentElement) chain.unshift(node);
-    const paragraph = sheetNodes(editable).find(node=>node.nodeType===1 && node.contains(source));
+    const paragraph = sheetNodes(editable).find(node=>node.nodeType===1 && node.contains(source)) ||
+      selectedParagraphs().find(node=>node.nodeType===1 && !node.dataset.image);
+    const sourceMarker = paragraph ? markerFormat(paragraph) : {};
     const paragraphFormat = paragraph ? {
       align:paragraph.style.textAlign || 'left',
       indent:Number(paragraph.dataset.indent || 0),
@@ -1107,6 +1109,8 @@ function initEditor(item) {
       spacing:Number(paragraph.dataset.spacing ?? settings.spacing.value),
       after:Number(paragraph.dataset.after ?? settings.after.value),
       list:listPrefix(paragraph)?.type,
+      marker:{...sourceMarker,size:sourceMarker.size || Number(settings.size.value),family:sourceMarker.family || settings.family.value},
+      start:listPrefix(paragraph)?.index ?? 0,
       gap:Number(paragraph.dataset.gap || 0)
     } : null;
     copiedFormat = {...chain.reduce((format,element)=>inlineFormat(element,format),{style:0}),paragraph:paragraphFormat};
@@ -1119,7 +1123,7 @@ function initEditor(item) {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return;
     const format = copiedFormat;
-    const paragraphs = selectedParagraphs();
+    const paragraphs = selectedParagraphs().filter(paragraph=>!paragraph.dataset.image);
     if (formatSelection(()=>{
       const span = document.createElement('span');
       span.dataset.formatStyle = format.style;
@@ -1132,14 +1136,14 @@ function initEditor(item) {
       const order = sheetNodes(editable);
       const previous = order[order.indexOf(paragraphs[0])-1];
       const marker = previous?.nodeType===1 ? listPrefix(previous) : null;
-      let index = marker?.type===layout.list && marker ? marker.index+1 : 0;
+      let index = marker?.type===layout.list && marker ? marker.index+1 : layout.start;
       for (const paragraph of paragraphs) {
         paragraph.style.textAlign = layout.align;
         setIndent(paragraph,layout.indent);
         setFirstIndent(paragraph,layout.first);
         setParagraphSpacing(paragraph,layout.spacing,layout.after);
         if (layout.list && paragraph.textContent.trim()) {
-          numberParagraph(paragraph,layout.list,index++);
+          numberParagraph(paragraph,layout.list,index++,true,layout.marker);
           setListGap(paragraph,layout.gap);
         }
         else clearNumbering(paragraph);
