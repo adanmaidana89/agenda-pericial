@@ -1084,6 +1084,7 @@ function initEditor(item) {
   const brush = $('format-brush');
   let copiedFormat = null;
   let shortcutBrush = false;
+  let shortcutFormat = null;
   brush.onmousedown = event => event.preventDefault();
   brush.onclick = () => {
     shortcutBrush = false;
@@ -1152,10 +1153,14 @@ function initEditor(item) {
         else clearNumbering(paragraph);
       }
     })) {
-      copiedFormat = null;
-      brush.setAttribute('aria-pressed','false');
-      brush.title = 'Pincel de formatação';
+      if (!shortcutBrush) {
+        copiedFormat = null;
+        brush.setAttribute('aria-pressed','false');
+        brush.title = 'Pincel de formatação';
+      }
+      return true;
     }
+    return false;
   }
   editable.addEventListener('pointerup',()=>{if (!shortcutBrush) applyFormatBrush();});
   editable.addEventListener('keyup',event=>{
@@ -1453,14 +1458,16 @@ function initEditor(item) {
       if (event.repeat) return;
       if (key==='c') {
         copyFormatBrush();
-        shortcutBrush = Boolean(copiedFormat);
-        if (shortcutBrush) notice('Formatação copiada. Selecione o destino e pressione Ctrl+Shift+V.');
-      } else if (copiedFormat) {
+        shortcutFormat = copiedFormat ? structuredClone(copiedFormat) : shortcutFormat;
+        shortcutBrush = Boolean(shortcutFormat);
+        if (shortcutBrush) notice('Formatação copiada. Use Ctrl+Shift+V nos trechos de destino.');
+      } else if (shortcutFormat) {
+        copiedFormat = structuredClone(shortcutFormat);
+        shortcutBrush = true;
         history.rememberBefore();
-        applyFormatBrush();
+        const applied = applyFormatBrush();
         history.record();
-        if (!copiedFormat) shortcutBrush = false;
-        else notice('Selecione o trecho de destino para aplicar a formatação.');
+        if (!applied) notice('Selecione o trecho de destino para aplicar a formatação.');
         schedulePages();
       } else notice('Copie uma formatação com Ctrl+Shift+C primeiro.');
       return;
